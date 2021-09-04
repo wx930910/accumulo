@@ -23,57 +23,69 @@ import static org.junit.Assert.assertEquals;
 import java.io.InputStream;
 import java.security.SecureRandom;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicLong;
 
+import org.apache.accumulo.core.util.ratelimit.RateLimiter;
 import org.apache.hadoop.fs.Seekable;
+import org.easymock.EasyMock;
 import org.junit.Test;
 
 public class RateLimitedInputStreamTest {
 
-  @Test
-  public void permitsAreProperlyAcquired() throws Exception {
-    Random randGen = new SecureRandom();
-    MockRateLimiter rateLimiter = new MockRateLimiter();
-    long bytesRetrieved = 0;
-    try (InputStream is = new RateLimitedInputStream(new RandomInputStream(), rateLimiter)) {
-      for (int i = 0; i < 100; ++i) {
-        int count = Math.abs(randGen.nextInt()) % 65536;
-        int countRead = is.read(new byte[count]);
-        assertEquals(count, countRead);
-        bytesRetrieved += count;
-      }
-    }
-    assertEquals(bytesRetrieved, rateLimiter.getPermitsAcquired());
-  }
+	@Test
+	public void permitsAreProperlyAcquired() throws Exception {
+		Random randGen = new SecureRandom();
+		// Create variables for tracking behaviors of mock object
+		AtomicLong rateLimiterPermitsAcquired = new AtomicLong();
+		// Construct mock object
+		RateLimiter rateLimiter = EasyMock.niceMock(RateLimiter.class);
+		// Stub Mock Method
+		rateLimiter.acquire(EasyMock.anyLong());
+		EasyMock.expectLastCall().andAnswer(() -> rateLimiterPermitsAcquired.addAndGet(EasyMock.getCurrentArgument(0)))
+				.anyTimes();
+		EasyMock.replay(rateLimiter);
 
-  private static class RandomInputStream extends InputStream implements Seekable {
-    private final Random r = new SecureRandom();
+		long bytesRetrieved = 0;
+		try (InputStream is = new RateLimitedInputStream(new RandomInputStream(), rateLimiter)) {
+			for (int i = 0; i < 100; ++i) {
+				int count = Math.abs(randGen.nextInt()) % 65536;
+				int countRead = is.read(new byte[count]);
+				assertEquals(count, countRead);
+				bytesRetrieved += count;
+			}
+		}
+		assertEquals(bytesRetrieved, rateLimiterPermitsAcquired.get());
+	}
 
-    @Override
-    public int read() {
-      return r.nextInt() & 0xff;
-    }
+	private static class RandomInputStream extends InputStream implements Seekable {
+		private final Random r = new SecureRandom();
 
-    @Override
-    public void seek(long pos) {
-      throw new UnsupportedOperationException("Not supported yet."); // To change body of generated
-                                                                     // methods, choose Tools |
-                                                                     // Templates.
-    }
+		@Override
+		public int read() {
+			return r.nextInt() & 0xff;
+		}
 
-    @Override
-    public long getPos() {
-      throw new UnsupportedOperationException("Not supported yet."); // To change body of generated
-                                                                     // methods, choose Tools |
-                                                                     // Templates.
-    }
+		@Override
+		public void seek(long pos) {
+			throw new UnsupportedOperationException("Not supported yet."); // To change body of generated
+																			// methods, choose Tools |
+																			// Templates.
+		}
 
-    @Override
-    public boolean seekToNewSource(long targetPos) {
-      throw new UnsupportedOperationException("Not supported yet."); // To change body of generated
-                                                                     // methods, choose Tools |
-                                                                     // Templates.
-    }
+		@Override
+		public long getPos() {
+			throw new UnsupportedOperationException("Not supported yet."); // To change body of generated
+																			// methods, choose Tools |
+																			// Templates.
+		}
 
-  }
+		@Override
+		public boolean seekToNewSource(long targetPos) {
+			throw new UnsupportedOperationException("Not supported yet."); // To change body of generated
+																			// methods, choose Tools |
+																			// Templates.
+		}
+
+	}
 
 }
